@@ -20,52 +20,54 @@ describe('Webinar Routes E2E', () => {
         const server = fixture.getServer();
         const prisma = fixture.getPrismaClient();
     
-        const response = await supertest(server)
-            .post('/webinars')
-            .send({
-                id: 'webinar-001',
-                title: 'Test Webinar',
-                seats: 50,
-                startDate: new Date(),
-                endDate: new Date(),
-                organizerId: 'test-organizer'
-            })
-            .expect(201);
+        const webinar = await prisma.webinar.create({
+            data: {
+              id: 'test-webinar',
+              title: 'Webinar Test',
+              seats: 10,
+              startDate: new Date(),
+              endDate: new Date(),
+              organizerId: 'test-user',
+            },
+          });
     
-        expect(response.body).toHaveProperty('id', 'webinar-001');
+        expect(webinar).toHaveProperty('id', 'test-webinar');
         const createdWebinar = await prisma.webinar.findUnique({
-            where: { id: 'webinar-001' }
+            where: { id: 'test-webinar' }
         });
         expect(createdWebinar).not.toBeNull();
     });
     
     it('should update webinar seats', async () => {
-        const server = fixture.getServer();
+        // ARRANGE
         const prisma = fixture.getPrismaClient();
+        const server = fixture.getServer();
     
         const webinar = await prisma.webinar.create({
-            data: {
-                id: 'webinar-002',
-                title: 'Update Webinar Seats',
-                seats: 20,
-                startDate: new Date(),
-                endDate: new Date(),
-                organizerId: 'test-organizer'
-            }
+          data: {
+            id: 'test-webinar',
+            title: 'Webinar Test',
+            seats: 10,
+            startDate: new Date(),
+            endDate: new Date(),
+            organizerId: 'test-user',
+          },
         });
     
+        // ACT
         const response = await supertest(server)
-            .post(`/webinars/${webinar.id}/seats`)
-            .send({ seats: '30' })
-            .expect(200);
+          .post(`/webinars/${webinar.id}/seats`)
+          .send({ seats: '30' })
+          .expect(200);
     
+        // ASSERT
         expect(response.body).toEqual({ message: 'Seats updated' });
     
         const updatedWebinar = await prisma.webinar.findUnique({
-            where: { id: webinar.id }
+          where: { id: webinar.id },
         });
         expect(updatedWebinar?.seats).toBe(30);
-    });
+      });
 
     it('should return WebinarNotFoundException', async () => {
         const server = fixture.getServer();
@@ -76,6 +78,37 @@ describe('Webinar Routes E2E', () => {
             .expect(404);
     
         expect(response.body).toEqual({ error: 'Webinar not found' });
+    });
+
+    it('should return WebinarNotOrganizerException', async () => {
+        const server = fixture.getServer();
+        const prisma = fixture.getPrismaClient();
+      
+        const webinar = await prisma.webinar.create({
+          data: {
+            id: 'webinar-003',
+            title: 'Webinar Not Organizer Test',
+            seats: 10,
+            startDate: new Date(),
+            endDate: new Date(),
+            organizerId: 'test-organizer',
+          },
+        });
+      
+        const response = await supertest(server)
+          .post(`/webinars/${webinar.id}/seats`)
+          .send({ seats: '50' })
+          .set('Authorization', 'Bearer non-organizer-token') 
+          .expect(401); 
+      
+        expect(response.body).toEqual({
+          error: 'User is not allowed to update this webinar',
+        });
+      
+        const updatedWebinar = await prisma.webinar.findUnique({
+          where: { id: webinar.id },
+        });
+        expect(updatedWebinar?.seats).toBe(10);
     });
     
   });
